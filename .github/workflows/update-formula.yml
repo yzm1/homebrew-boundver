@@ -114,9 +114,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          brew audit --strict --online "$GITHUB_WORKSPACE/Formula/boundver.rb"
-          brew install --build-from-source "$GITHUB_WORKSPACE/Formula/boundver.rb"
-          brew test boundver
+          brew tap --custom-remote yzm1/boundver "$GITHUB_WORKSPACE"
+          tap_formula="$(brew --repository yzm1/boundver)/Formula/boundver.rb"
+          install -m 0644 "$GITHUB_WORKSPACE/Formula/boundver.rb" "$tap_formula"
+          brew audit --strict --online yzm1/boundver/boundver
+          brew install --build-from-source yzm1/boundver/boundver
+          brew test yzm1/boundver/boundver
           test "$(boundver --version)" = "boundver ${{ steps.release.outputs.version }}"
 
       - name: Retain the tested formula
