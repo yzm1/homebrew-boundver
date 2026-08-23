@@ -29,6 +29,7 @@ def render(version: str, digest: str) -> str:
 
   def install
     python = formula_opt_bin("python@3.14")/"python3.14"
+    bin.mkpath
     system python, "-m", "zipapp", "boundver-{version}.pyz",
            "--output", bin/"boundver", "--python", python
   end

@@ -9,6 +9,7 @@ class Boundver < Formula
 
   def install
     python = formula_opt_bin("python@3.14")/"python3.14"
+    bin.mkpath
     system python, "-m", "zipapp", "boundver-0.12.0.pyz",
            "--output", bin/"boundver", "--python", python
   end
