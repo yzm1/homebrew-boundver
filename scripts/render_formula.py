@@ -20,9 +20,8 @@ def render(version: str, digest: str) -> str:
         raise ValueError("digest must be lowercase SHA-256")
     return f'''class Boundver < Formula
   desc "Classify contract drift and downstream impact across polyglot repositories"
-  homepage "https://yzm1.github.io/boundver/"
+  homepage "https://github.com/yzm1/boundver"
   url "https://github.com/yzm1/boundver/releases/download/v{version}/boundver-{version}.pyz"
-  version "{version}"
   sha256 "{digest}"
   license "MIT"
 
@@ -32,7 +31,7 @@ def render(version: str, digest: str) -> str:
     libexec.install "boundver-{version}.pyz" => "boundver.pyz"
     (bin/"boundver").write <<~SH
       #!/bin/bash
-      exec "#{{Formula["python@3.14"].opt_bin}}/python3.14" "#{{libexec}}/boundver.pyz" "$@"
+      exec "#{{formula_opt_bin("python@3.14")}}/python3.14" "#{{libexec}}/boundver.pyz" "$@"
     SH
     chmod 0755, bin/"boundver"
   end

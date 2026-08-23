@@ -29,7 +29,7 @@ jobs:
           brew audit --strict --online yzm1/boundver/boundver
           brew install --build-from-source yzm1/boundver/boundver
           brew test yzm1/boundver/boundver
-          expected=$(sed -n 's/^  version "\([0-9][0-9.]*\)"$/\1/p' \
+          expected=$(sed -n 's|^  url ".*/v\([0-9][0-9.]*\)/boundver-[^"]*"$|\1|p' \
             "$GITHUB_WORKSPACE/Formula/boundver.rb")
           [[ "$expected" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$(boundver --version)" = "boundver $expected"
