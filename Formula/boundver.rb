@@ -8,11 +8,9 @@ class Boundver < Formula
   depends_on "python@3.14"
 
   def install
-    libexec.install "boundver-0.12.0.pyz" => "boundver.pyz"
-    inreplace libexec/"boundver.pyz", "#!/usr/bin/env python3",
-              "#!#{formula_opt_bin("python@3.14")}/python3.14"
-    chmod 0755, libexec/"boundver.pyz"
-    bin.install_symlink libexec/"boundver.pyz" => "boundver"
+    python = formula_opt_bin("python@3.14")/"python3.14"
+    system python, "-m", "zipapp", "boundver-0.12.0.pyz",
+           "--output", bin/"boundver", "--python", python
   end
 
   test do
