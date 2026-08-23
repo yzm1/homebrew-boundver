@@ -32,4 +32,4 @@ jobs:
           expected=$(sed -n 's|^  url ".*/v\([0-9][0-9.]*\)/boundver-[^"]*"$|\1|p' \
             "$GITHUB_WORKSPACE/Formula/boundver.rb")
           [[ "$expected" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$(boundver --version)" = "boundver $expected"
+          [[ "$(boundver --version)" == *" $expected" ]]

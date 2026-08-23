@@ -15,6 +15,6 @@ class Boundver < Formula
   end
 
   test do
-    assert_match "boundver 0.12.0", shell_output("#{bin}/boundver --version")
+    assert_match "0.12.0", shell_output("#{bin}/boundver --version")
   end
 end

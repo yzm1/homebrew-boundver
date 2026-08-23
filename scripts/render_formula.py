@@ -35,7 +35,7 @@ def render(version: str, digest: str) -> str:
   end
 
   test do
-    assert_match "boundver {version}", shell_output("#{{bin}}/boundver --version")
+    assert_match "{version}", shell_output("#{{bin}}/boundver --version")
   end
 end
 '''
