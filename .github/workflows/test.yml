@@ -1,0 +1,32 @@
+name: Test tap
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  formula:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Audit, install, and test the public formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew audit --strict --online "$GITHUB_WORKSPACE/Formula/boundver.rb"
+          brew install --build-from-source "$GITHUB_WORKSPACE/Formula/boundver.rb"
+          brew test boundver
+          expected=$(sed -n 's/^  version "\([0-9][0-9.]*\)"$/\1/p' \
+            "$GITHUB_WORKSPACE/Formula/boundver.rb")
+          [[ "$expected" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(boundver --version)" = "boundver $expected"

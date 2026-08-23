@@ -1,0 +1,198 @@
+name: Propose formula update
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact MAJOR.MINOR.PATCH release; empty selects latest.
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  prepare:
+    runs-on: macos-15
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.render.outputs.changed }}
+      formula-sha256: ${{ steps.render.outputs.formula-sha256 }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve one immutable boundver release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_VERSION" ]]; then
+            if [[ ! "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Requested version is not exact SemVer" >&2
+              exit 1
+            fi
+            tag="v$REQUESTED_VERSION"
+          else
+            tag=$(gh api repos/yzm1/boundver/releases/latest --jq '.tag_name')
+          fi
+          metadata=$(mktemp)
+          gh api "repos/yzm1/boundver/releases/tags/$tag" > "$metadata"
+          jq -e --arg tag "$tag" '
+            .tag_name == $tag
+            and .draft == false
+            and .prerelease == false
+            and .immutable == true
+          ' "$metadata" >/dev/null
+          version=${tag#v}
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Latest release tag is not exact SemVer" >&2
+            exit 1
+          fi
+          asset="boundver-$version.pyz"
+          digest=$(jq -er --arg asset "$asset" '
+            [.assets[] | select(.name == $asset)]
+            | select(length == 1)
+            | .[0].digest
+            | select(test("^sha256:[0-9a-f]{64}$"))
+          ' "$metadata")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+          echo "sha256=${digest#sha256:}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the retained archive and release checksum
+        shell: bash
+        env:
+          ASSET: ${{ steps.release.outputs.asset }}
+          EXPECTED_SHA256: ${{ steps.release.outputs.sha256 }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/release"
+          gh release download "$TAG" --repo yzm1/boundver \
+            --pattern "$ASSET" --pattern SHA256SUMS \
+            --dir "$RUNNER_TEMP/release"
+          actual=$(shasum -a 256 "$RUNNER_TEMP/release/$ASSET" | awk '{print $1}')
+          test "$actual" = "$EXPECTED_SHA256"
+          matches=$(awk -v digest="$EXPECTED_SHA256" -v asset="$ASSET" \
+            '$1 == digest && $2 == asset { count++ } END { print count + 0 }' \
+            "$RUNNER_TEMP/release/SHA256SUMS")
+          test "$matches" = 1
+
+      - name: Render the exact formula
+        id: render
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ steps.release.outputs.sha256 }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 scripts/render_formula.py \
+            --version "$VERSION" \
+            --sha256 "$EXPECTED_SHA256" \
+            --output Formula/boundver.rb
+          formula_sha256=$(shasum -a 256 Formula/boundver.rb | awk '{print $1}')
+          echo "formula-sha256=$formula_sha256" >> "$GITHUB_OUTPUT"
+          if git diff --quiet -- Formula/boundver.rb; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Audit, install, and test the candidate formula
+        if: steps.render.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew audit --strict --online "$GITHUB_WORKSPACE/Formula/boundver.rb"
+          brew install --build-from-source "$GITHUB_WORKSPACE/Formula/boundver.rb"
+          brew test boundver
+          test "$(boundver --version)" = "boundver ${{ steps.release.outputs.version }}"
+
+      - name: Retain the tested formula
+        if: steps.render.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: formula-${{ github.run_id }}-${{ github.run_attempt }}
+          path: Formula/boundver.rb
+          if-no-files-found: error
+          retention-days: 7
+
+  propose:
+    if: needs.prepare.outputs.changed == 'true'
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: formula-update
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout trusted tap main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: main
+
+      - name: Download the tested formula only
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: formula-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/formula
+
+      - name: Open a reviewable formula update
+        shell: bash
+        env:
+          EXPECTED_FORMULA_SHA256: ${{ needs.prepare.outputs.formula-sha256 }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/formula/boundver.rb"
+          test -f "$candidate"
+          actual=$(sha256sum "$candidate" | awk '{print $1}')
+          test "$actual" = "$EXPECTED_FORMULA_SHA256"
+          install -m 0644 "$candidate" Formula/boundver.rb
+          git diff --check
+          git diff --exit-code --quiet -- Formula/boundver.rb && {
+            echo "Formula already matches after protected approval"
+            exit 0
+          }
+          branch="automation/boundver-$VERSION"
+          diagnostic=$(mktemp)
+          set +e
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" \
+            >/dev/null 2>"$diagnostic"
+          branch_exit=$?
+          set -e
+          if [[ $branch_exit -eq 0 ]]; then
+            echo "Update branch already exists: $branch" >&2
+            exit 1
+          fi
+          if ! grep -Fq 'HTTP 404' "$diagnostic"; then
+            echo "Cannot prove the update branch is absent" >&2
+            sed -n '1,20p' "$diagnostic" >&2
+            exit 1
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git switch -c "$branch"
+          git add Formula/boundver.rb
+          git commit -m "chore: update boundver formula to $VERSION"
+          gh auth setup-git
+          git push origin "HEAD:refs/heads/$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore: update boundver formula to $VERSION" \
+            --body "Updates the formula from immutable boundver release v$VERSION. The prepare job verified SHA256SUMS and passed brew audit, install, and test on macOS."
