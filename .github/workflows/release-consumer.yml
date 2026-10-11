@@ -1,0 +1,18 @@
+name: Boundver v0.16 release consumer
+on: push
+permissions:
+  contents: read
+jobs:
+  consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: yzm1/boundver
+          ref: af31622ee0a3b6f3e447b4d2dadfa51e94eac79f
+          persist-credentials: false
+      - name: Exact release consumer
+        uses: yzm1/boundver@v0.16.0
+      - name: Compatibility alias consumer
+        uses: yzm1/boundver@v0.16
