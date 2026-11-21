@@ -1,0 +1,23 @@
+name: Boundver 0.17.0 Action consumer smoke
+on:
+  push:
+    branches: [smoke/boundver-0.17.0]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [v0.17.0, v0.17]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: yzm1/boundver
+          ref: 6939e0d6933e0e9b825593b87b78db794754458c
+          persist-credentials: false
+      - if: matrix.ref == 'v0.17.0'
+        uses: yzm1/boundver@v0.17.0
+      - if: matrix.ref == 'v0.17'
+        uses: yzm1/boundver@v0.17
