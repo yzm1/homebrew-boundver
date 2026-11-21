@@ -26,6 +26,7 @@ jobs:
           brew tap --custom-remote yzm1/boundver "$GITHUB_WORKSPACE"
           tap_formula="$(brew --repository yzm1/boundver)/Formula/boundver.rb"
           install -m 0644 "$GITHUB_WORKSPACE/Formula/boundver.rb" "$tap_formula"
+          brew trust --formula yzm1/boundver/boundver
           brew audit --strict --online yzm1/boundver/boundver
           brew install --build-from-source yzm1/boundver/boundver
           brew test yzm1/boundver/boundver
